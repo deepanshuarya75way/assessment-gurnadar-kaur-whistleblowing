@@ -113,7 +113,15 @@ const reportSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId, 
     default: null,
     index: true 
-  }
+  },
+
+  // ==========================================
+  // NEW: TRACK PERMANENTLY DISMISSED MATCHES
+  // ==========================================
+  dismissedMatches: [{ 
+    type: mongoose.Schema.Types.ObjectId, 
+    ref: 'Report' 
+  }]
 
 }, { timestamps: false });
 

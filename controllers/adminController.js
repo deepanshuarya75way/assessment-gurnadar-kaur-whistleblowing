@@ -220,21 +220,51 @@ exports.viewReport = async (req, res) => {
     const report = await Report.findById(req.params.id);
     if (!report) return res.render('error', { title: '404', message: 'Report not found.', code: 404 });
 
-        // =========================================================================
-    // FIXED: CORRECT MONGODB TEXT SEARCH SYNTAX
-    // =========================================================================
+    // 1. Fetch matching documents while filtering out permanently dismissed items
+    const baseDismissed = report.dismissedMatches || [];
     const similarReports = await Report.find({
       $text: { $search: report.description },
-      _id: { $ne: report._id }, // Exclude current report
-      category: report.category, // Limits text scan to matches within the same enum category
-      accusedOrganization: report.accusedOrganization // Limits matches to the same target entity
+      _id: { $ne: report._id, $nin: baseDismissed }, // Excludes itself and all items inside dismissedMatches
+      category: report.category, 
+      accusedOrganization: report.accusedOrganization 
     })
-    .select({ score: { $meta: "textScore" }, ackNumber: 1, title: 1, clusterId: 1, status: 1 })
+    .select({ score: { $meta: "textScore" }, ackNumber: 1, title: 1, clusterId: 1, status: 1, accusedPersons: 1 })
     .sort({ score: { $meta: "textScore" } })
     .limit(5);
-    // =========================================================================
 
-    // =========================================================================
+    // 2. Generate custom structured reason tags for UI explanations
+    const similarWithReasons = similarReports.map(function(match) {
+      const doc = match._doc || match;
+      // Normalizes standard textScore metrics into an understandable percentage frame
+      const textScorePercent = Math.min(100, Math.round((doc.score || 1) * 85));
+      const reasons = ["Vocabulary patterns overlap: " + textScorePercent + "%"];
+      
+      const overlappingNames = (doc.accusedPersons || []).filter(function(name) {
+        return (report.accusedPersons || []).includes(name);
+      });
+      
+      if (overlappingNames.length > 0) {
+        reasons.push("Identical target subjects: " + overlappingNames.join(', '));
+      }
+      
+      doc.matchReasons = reasons;
+      return doc;
+    });
+
+    // 3. Query historical merge trails connected to this specific acknowledgment identity code
+    let mergeHistory = [];
+    try {
+      const AuditLog = mongoose.model('AuditLog');
+      mergeHistory = await AuditLog.find({
+        action: 'LINK_REPORT_CLUSTER',
+        $or: [
+          { targetId: report.ackNumber },
+          { details: { $regex: report.ackNumber } }
+        ]
+      }).sort({ timestamp: -1 });
+    } catch (auditError) {
+      logger.warn('AuditLog model could not be queried for timeline logs: ' + auditError.message);
+    }
 
     // Decrypt sensitive fields for admin view
     const decryptedName = report.reporterName ? decrypt(report.reporterName) : 'Anonymous';
@@ -249,20 +279,70 @@ exports.viewReport = async (req, res) => {
     });
 
     res.render('admin/reportDetail', {
-      title: `Report ${report.ackNumber}`,
+      title: 'Report ' + report.ackNumber,
       admin: { name: req.session.adminName },
-      report,
-      similarReports, // <-- Passed directly to admin/reportDetail.ejs
-      decryptedName,
-      decryptedContact,
-      decryptedMessages,
-      csrfToken: req.csrfToken(),
+      report: report,
+      similarReports: similarWithReasons, // <-- Passes upgraded version containing matching explanations
+      mergeHistory: mergeHistory,         // <-- Passes link log tracking collections
+      decryptedName: decryptedName,
+      decryptedContact: decryptedContact,
+      decryptedMessages: decryptedMessages,
+      csrfToken: req.csrfToken()
     });
   } catch (err) {
     logger.error('View report error:', err);
     res.render('error', { title: 'Error', message: 'Could not load report.', code: 500 });
   }
 };
+
+// exports.viewReport = async (req, res) => {
+//   try {
+//     const report = await Report.findById(req.params.id);
+//     if (!report) return res.render('error', { title: '404', message: 'Report not found.', code: 404 });
+
+//         // =========================================================================
+//     // FIXED: CORRECT MONGODB TEXT SEARCH SYNTAX
+//     // =========================================================================
+//     const similarReports = await Report.find({
+//       $text: { $search: report.description },
+//       _id: { $ne: report._id }, // Exclude current report
+//       category: report.category, // Limits text scan to matches within the same enum category
+//       accusedOrganization: report.accusedOrganization // Limits matches to the same target entity
+//     })
+//     .select({ score: { $meta: "textScore" }, ackNumber: 1, title: 1, clusterId: 1, status: 1 })
+//     .sort({ score: { $meta: "textScore" } })
+//     .limit(5);
+//     // =========================================================================
+
+//     // =========================================================================
+
+//     // Decrypt sensitive fields for admin view
+//     const decryptedName = report.reporterName ? decrypt(report.reporterName) : 'Anonymous';
+//     const decryptedContact = report.reporterContact ? decrypt(report.reporterContact) : 'Not provided';
+    
+//     const decryptedMessages = (report.messages || []).map(m => {
+//       return {
+//         sender: m.sender,
+//         text: decrypt(m.content.iv + ':' + m.content.content),
+//         timestamp: m.timestamp
+//       };
+//     });
+
+//     res.render('admin/reportDetail', {
+//       title: `Report ${report.ackNumber}`,
+//       admin: { name: req.session.adminName },
+//       report,
+//       similarReports, // <-- Passed directly to admin/reportDetail.ejs
+//       decryptedName,
+//       decryptedContact,
+//       decryptedMessages,
+//       csrfToken: req.csrfToken(),
+//     });
+//   } catch (err) {
+//     logger.error('View report error:', err);
+//     res.render('error', { title: 'Error', message: 'Could not load report.', code: 500 });
+//   }
+// };
 
 
 // POST /admin/reports/:id/status
