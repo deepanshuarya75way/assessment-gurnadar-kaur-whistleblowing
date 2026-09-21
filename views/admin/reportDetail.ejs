@@ -139,6 +139,58 @@
         </form>
       </div>
     </div>
+     <!-- Risk Analysis -->
+    <div class="dash-card">
+      <div class="dash-card-header"><h3><i class="fas fa-chart-bar"></i> Risk Analysis</h3></div>
+      <div class="risk-meter">
+        <div class="meter-label">Risk Score: <%= report.riskScore.score %>/100</div>
+        <div class="meter-bar">
+          <div class="meter-fill <%= report.riskScore.level %>" style="width:<%= report.riskScore.score %>%"></div>
+        </div>
+        <span class="risk-badge <%= report.riskScore.level %>" style="margin-top:8px"><%= report.riskScore.level.toUpperCase() %></span>
+      </div>
+      <% if (report.riskScore.factors && report.riskScore.factors.length) { %>
+      <div class="risk-factors">
+        <p class="factor-title">Risk Factors:</p>
+        <% report.riskScore.factors.forEach(f => { %>
+        <div class="factor-item"><i class="fas fa-circle-dot"></i> <%= f %></div>
+        <% }) %>
+      </div>
+      <% } %>
+    </div>
+
+    <!-- Threat Flags -->
+    <div class="dash-card">
+      <div class="dash-card-header"><h3><i class="fas fa-shield-virus"></i> Threat Detection</h3></div>
+      <div class="threat-info">
+        <div class="threat-row">
+          <span>Suspicion Score</span>
+          <span class="<%= report.threatFlags.suspicionScore >= 50 ? 'danger' : 'safe' %>">
+            <%= report.threatFlags.suspicionScore %>%
+          </span>
+        </div>
+        <div class="threat-row">
+          <span>Duplicate Content</span>
+          <span class="<%= report.threatFlags.isDuplicate ? 'danger' : 'safe' %>">
+            <%= report.threatFlags.isDuplicate ? '⚠️ Yes' : '✓ No' %>
+          </span>
+        </div>
+        <div class="threat-row">
+          <span>Spam Detected</span>
+          <span class="<%= report.threatFlags.isSpam ? 'danger' : 'safe' %>">
+            <%= report.threatFlags.isSpam ? '⚠️ Yes' : '✓ No' %>
+          </span>
+        </div>
+        <% if (report.threatFlags.flags && report.threatFlags.flags.length) { %>
+        <div class="threat-flags-list">
+          <% report.threatFlags.flags.forEach(f => { %>
+          <div class="flag-item"><i class="fas fa-flag"></i> <%= f %></div>
+          <% }) %>
+        </div>
+        <% } %>
+      </div>
+    </div>
+
   </div>
 
   <!-- Right Column -->
@@ -267,7 +319,7 @@
     <!-- END: UPGRADED AI CROSS-REFERENCE ENGINE CARD -->
     <!-- ========================================================================= -->
 
-    <!-- Risk Analysis -->
+    Risk Analysis
     <div class="dash-card">
       <div class="dash-card-header"><h3><i class="fas fa-chart-bar"></i> Risk Analysis</h3></div>
       <div class="risk-meter">
