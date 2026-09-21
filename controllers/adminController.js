@@ -70,6 +70,54 @@ exports.logout = async (req, res) => {
 };
 
 // GET /admin/dashboard5
+// exports.dashboard = async (req, res) => {
+//   try {
+//     const [
+//       totalReports,
+//       pendingReports,
+//       highRiskCount,
+//       criticalRiskCount,
+//       suspiciousCount,
+//       recentReports,
+//       recentAuditLogs,
+//       categoryStats,
+//       statusStats,  // 1. Fetch the raw counts array 
+//       clusterGroupsData,
+//       // 2. Fetch the reports belonging to clusters to populate the bottom click list
+//       clusteredReports
+//     ] = await Promise.all([
+//       Report.countDocuments(),
+//       Report.countDocuments({ status: 'pending' }),
+//       Report.countDocuments({ 'riskScore.level': 'high' }),
+//       Report.countDocuments({ 'riskScore.level': 'critical' }),
+//       Report.countDocuments({ 'threatFlags.suspicionScore': { $gte: 50 } }),
+//       Report.find().sort({ submittedAt: -1 }).limit(8).select('ackNumber title category severity riskScore status submittedAt threatFlags'),
+//       AuditLog.find().sort({ timestamp: -1 }).limit(10),
+//       Report.aggregate([{ $group: { _id: '$category', count: { $sum: 1 } } }]),
+//       Report.aggregate([{ $group: { _id: '$status', count: { $sum: 1 } } }]),
+//     ]);
+
+//     res.render('admin/dashboard', {
+//       title: 'Security Dashboard – SecureVoice',
+//       admin: { name: req.session.adminName, role: req.session.adminRole },
+//       stats: {
+//         totalReports,
+//         pendingReports,
+//         highRiskCount,
+//         criticalRiskCount,
+//         suspiciousCount,
+//         resolvedReports: (statusStats.find(s => s._id === 'resolved') || {}).count || 0,
+//       },
+//       recentReports,
+//       recentAuditLogs,
+//       categoryStats,
+//       statusStats,
+//     });
+//   } catch (err) {
+//     logger.error('Dashboard error:', err);
+//     res.render('error', { title: 'Error', message: 'Dashboard load failed.', code: 500 });
+//   }
+// };
 exports.dashboard = async (req, res) => {
   try {
     const [
@@ -81,7 +129,10 @@ exports.dashboard = async (req, res) => {
       recentReports,
       recentAuditLogs,
       categoryStats,
-      statusStats,
+      statusStats,  
+      // ADDED EXTENDED DESTRUCTURING RECIPIENT KEYS
+      clusterGroupsData,
+      clusteredReports
     ] = await Promise.all([
       Report.countDocuments(),
       Report.countDocuments({ status: 'pending' }),
@@ -92,7 +143,17 @@ exports.dashboard = async (req, res) => {
       AuditLog.find().sort({ timestamp: -1 }).limit(10),
       Report.aggregate([{ $group: { _id: '$category', count: { $sum: 1 } } }]),
       Report.aggregate([{ $group: { _id: '$status', count: { $sum: 1 } } }]),
+      // ADDED MISSING QUERIES IN PROMISE STACK
+      Report.aggregate([
+        { $match: { clusterId: { $ne: null } } },
+        { $group: { _id: "$clusterId" } },
+        { $count: "count" }
+      ]),
+      Report.find({ clusterId: { $ne: null } }).sort({ submittedAt: -1 }).select('ackNumber title category status clusterId submittedAt')
     ]);
+
+    // Secure array lookup calculations to fetch the matching number count
+    const clusterGroupsCount = clusterGroupsData && clusterGroupsData[0] ? clusterGroupsData[0].count : 0;
 
     res.render('admin/dashboard', {
       title: 'Security Dashboard – SecureVoice',
@@ -103,9 +164,11 @@ exports.dashboard = async (req, res) => {
         highRiskCount,
         criticalRiskCount,
         suspiciousCount,
+        clusterGroupsCount, // <-- Now perfectly mapped to your custom view template variable
         resolvedReports: (statusStats.find(s => s._id === 'resolved') || {}).count || 0,
       },
       recentReports,
+      clusteredReports, // <-- Passed completely to populate your new click sections!
       recentAuditLogs,
       categoryStats,
       statusStats,
@@ -115,6 +178,7 @@ exports.dashboard = async (req, res) => {
     res.render('error', { title: 'Error', message: 'Dashboard load failed.', code: 500 });
   }
 };
+
 
 // GET /admin/reports
 exports.listReports = async (req, res) => {
@@ -202,6 +266,37 @@ exports.viewReport = async (req, res) => {
 
 
 // POST /admin/reports/:id/status
+// exports.updateStatus = async (req, res) => {
+//   try {
+//     const { status, adminNotes } = req.body;
+//     const report = await Report.findById(req.params.id);
+//     if (!report) return res.status(404).json({ error: 'Report not found' });
+
+//     const oldStatus = report.status;
+//     report.status = status;
+//     report.adminNotes = adminNotes;
+//     if (status === 'resolved') report.resolvedAt = new Date();
+//     await report.save();
+
+//     await logAction({
+//       adminId: req.session.adminId,
+//       adminEmail: req.session.adminEmail,
+//       action: 'UPDATE_REPORT_STATUS',
+//       targetType: 'report',
+//       targetId: report.ackNumber,
+//       details: `Status changed from ${oldStatus} to ${status}`,
+//       oldValue: { status: oldStatus },
+//       newValue: { status },
+//       ip: req.ip,
+//     });
+
+//     res.redirect(`/admin/reports/${req.params.id}`);
+//   } catch (err) {
+//     logger.error('Update status error:', err);
+//     res.status(500).json({ error: 'Update failed' });
+//   }
+// };
+
 exports.updateStatus = async (req, res) => {
   try {
     const { status, adminNotes } = req.body;
@@ -214,24 +309,42 @@ exports.updateStatus = async (req, res) => {
     if (status === 'resolved') report.resolvedAt = new Date();
     await report.save();
 
+    // =========================================================================
+    // DYNAMIC SYNC: AUTOMATICALLY UPDATE ALL OTHER LINKED COMPLAINTS IN CLUSTER
+    // =========================================================================
+    if (report.clusterId) {
+      const clusterUpdateData = { status: status, adminNotes: adminNotes };
+      if (status === 'resolved') {
+        clusterUpdateData.resolvedAt = new Date();
+      }
+      
+      // Update all documents sharing this clusterId except the current file itself
+      await Report.updateMany(
+        { clusterId: report.clusterId, _id: { $ne: report._id } },
+        { $set: clusterUpdateData }
+      );
+    }
+    // =========================================================================
+
     await logAction({
       adminId: req.session.adminId,
       adminEmail: req.session.adminEmail,
       action: 'UPDATE_REPORT_STATUS',
       targetType: 'report',
       targetId: report.ackNumber,
-      details: `Status changed from ${oldStatus} to ${status}`,
+      details: 'Status changed from ' + oldStatus + ' to ' + status + ' (Synced to cluster group)',
       oldValue: { status: oldStatus },
       newValue: { status },
       ip: req.ip,
     });
 
-    res.redirect(`/admin/reports/${req.params.id}`);
+    res.redirect('/admin/reports/' + req.params.id);
   } catch (err) {
     logger.error('Update status error:', err);
     res.status(500).json({ error: 'Update failed' });
   }
 };
+
 
 // GET /admin/audit-logs
 exports.auditLogs = async (req, res) => {
