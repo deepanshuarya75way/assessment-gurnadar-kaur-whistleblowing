@@ -69,87 +69,7 @@ exports.logout = async (req, res) => {
   res.redirect('/admin/login');
 };
 
-// // GET /admin/dashboard
-// exports.dashboard = async (req, res) => {
-//   try {
-//     const [
-//       totalReports,
-//       pendingReports,
-//       highRiskCount,
-//       criticalRiskCount,
-//       suspiciousCount,
-//       recentReports,
-//       recentAuditLogs,
-//       categoryStats,
-//       statusStats,
-//     ] = await Promise.all([
-//       Report.countDocuments(),
-//       Report.countDocuments({ status: 'pending' }),
-//       Report.countDocuments({ 'riskScore.level': 'high' }),
-//       Report.countDocuments({ 'riskScore.level': 'critical' }),
-//       Report.countDocuments({ 'threatFlags.suspicionScore': { $gte: 50 } }),
-//       Report.find().sort({ submittedAt: -1 }).limit(8).select('ackNumber title category severity riskScore status submittedAt threatFlags'),
-//       AuditLog.find().sort({ timestamp: -1 }).limit(10),
-//       Report.aggregate([{ $group: { _id: '$category', count: { $sum: 1 } } }]),
-//       Report.aggregate([{ $group: { _id: '$status', count: { $sum: 1 } } }]),
-//     ]);
-
-//     res.render('admin/dashboard', {
-//       title: 'Security Dashboard – SecureVoice',
-//       admin: { name: req.session.adminName, role: req.session.adminRole },
-//       stats: {
-//         totalReports,
-//         pendingReports,
-//         highRiskCount,
-//         criticalRiskCount,
-//         suspiciousCount,
-//         resolvedReports: (statusStats.find(s => s._id === 'resolved') || {}).count || 0,
-//       },
-//       recentReports,
-//       recentAuditLogs,
-//       categoryStats,
-//       statusStats,
-//     });
-//   } catch (err) {
-//     logger.error('Dashboard error:', err);
-//     res.render('error', { title: 'Error', message: 'Dashboard load failed.', code: 500 });
-//   }
-// };
-
-// // GET /admin/reports
-// exports.listReports = async (req, res) => {
-//   try {
-//     const page = parseInt(req.query.page) || 1;
-//     const limit = 15;
-//     const skip = (page - 1) * limit;
-
-//     const filter = {};
-//     if (req.query.status) filter.status = req.query.status;
-//     if (req.query.risk) filter['riskScore.level'] = req.query.risk;
-//     if (req.query.category) filter.category = req.query.category;
-
-//     const [reports, total] = await Promise.all([
-//       Report.find(filter).sort({ submittedAt: -1 }).skip(skip).limit(limit),
-//       Report.countDocuments(filter),
-//     ]);
-
-//     res.render('admin/reports', {
-//       title: 'All Reports',
-//       admin: { name: req.session.adminName },
-//       reports,
-//       currentPage: page,
-//       totalPages: Math.ceil(total / limit),
-//       total,
-//       query: req.query,
-//     });
-//   } catch (err) {
-//     logger.error('List reports error:', err);
-//     res.render('error', { title: 'Error', message: 'Could not load reports.', code: 500 });
-//   }
-// };
-
-
-// GET /admin/dashboard
+// GET /admin/dashboard5
 exports.dashboard = async (req, res) => {
   try {
     const [
@@ -162,10 +82,6 @@ exports.dashboard = async (req, res) => {
       recentAuditLogs,
       categoryStats,
       statusStats,
-      // ==========================================
-      // NEW: Count distinct linked report groups
-      // ==========================================
-      clusterGroupsCount 
     ] = await Promise.all([
       Report.countDocuments(),
       Report.countDocuments({ status: 'pending' }),
@@ -176,16 +92,8 @@ exports.dashboard = async (req, res) => {
       AuditLog.find().sort({ timestamp: -1 }).limit(10),
       Report.aggregate([{ $group: { _id: '$category', count: { $sum: 1 } } }]),
       Report.aggregate([{ $group: { _id: '$status', count: { $sum: 1 } } }]),
-      // ==========================================
-      // NEW AGGREGATION BLOCK
-      // ==========================================
-      Report.aggregate([
-        { $match: { clusterId: { $ne: null } } },
-        { $group: { _id: "$clusterId" } },
-        { $count: "count" }
-      ]).then(res => res[0]?.count || 0)
-      // ==========================================
     ]);
+
     res.render('admin/dashboard', {
       title: 'Security Dashboard – SecureVoice',
       admin: { name: req.session.adminName, role: req.session.adminRole },
@@ -195,54 +103,51 @@ exports.dashboard = async (req, res) => {
         highRiskCount,
         criticalRiskCount,
         suspiciousCount,
-        clusterGroupsCount, 
         resolvedReports: (statusStats.find(s => s._id === 'resolved') || {}).count || 0,
       },
       recentReports,
       recentAuditLogs,
       categoryStats,
-      statusStats
-    }); // <--- FIXED: Changed from ] to }
+      statusStats,
+    });
   } catch (err) {
     logger.error('Dashboard error:', err);
     res.render('error', { title: 'Error', message: 'Dashboard load failed.', code: 500 });
   }
 };
 
+// GET /admin/reports
+exports.listReports = async (req, res) => {
+  try {
+    const page = parseInt(req.query.page) || 1;
+    const limit = 15;
+    const skip = (page - 1) * limit;
 
+    const filter = {};
+    if (req.query.status) filter.status = req.query.status;
+    if (req.query.risk) filter['riskScore.level'] = req.query.risk;
+    if (req.query.category) filter.category = req.query.category;
 
-// GET /admin/reports/:id
-// exports.viewReport = async (req, res) => {
-//   try {
-//     const report = await Report.findById(req.params.id);
-//     if (!report) return res.render('error', { title: '404', message: 'Report not found.', code: 404 });
+    const [reports, total] = await Promise.all([
+      Report.find(filter).sort({ submittedAt: -1 }).skip(skip).limit(limit),
+      Report.countDocuments(filter),
+    ]);
 
-//     // Decrypt sensitive fields for admin view
-//     const decryptedName = report.reporterName ? decrypt(report.reporterName) : 'Anonymous';
-//     const decryptedContact = report.reporterContact ? decrypt(report.reporterContact) : 'Not provided';
-    
-//     const decryptedMessages = (report.messages || []).map(m => {
-//       return {
-//         sender: m.sender,
-//         text: decrypt(m.content.iv + ':' + m.content.content),
-//         timestamp: m.timestamp
-//       };
-//     });
+    res.render('admin/reports', {
+      title: 'All Reports',
+      admin: { name: req.session.adminName },
+      reports,
+      currentPage: page,
+      totalPages: Math.ceil(total / limit),
+      total,
+      query: req.query,
+    });
+  } catch (err) {
+    logger.error('List reports error:', err);
+    res.render('error', { title: 'Error', message: 'Could not load reports.', code: 500 });
+  }
+};
 
-//     res.render('admin/reportDetail', {
-//       title: `Report ${report.ackNumber}`,
-//       admin: { name: req.session.adminName },
-//       report,
-//       decryptedName,
-//       decryptedContact,
-//       decryptedMessages,
-//       csrfToken: req.csrfToken(),
-//     });
-//   } catch (err) {
-//     logger.error('View report error:', err);
-//     res.render('error', { title: 'Error', message: 'Could not load report.', code: 500 });
-//   }
-// };
 
 
 // GET /admin/reports/:id
@@ -434,3 +339,103 @@ exports.linkReportToCluster = async (req, res) => {
     res.status(500).json({ error: 'Failed to link reports together.' });
   }
 };
+
+
+
+
+
+
+// GET /admin/dashboard
+// exports.dashboard = async (req, res) => {
+//   try {
+//     const [
+//       totalReports,
+//       pendingReports,
+//       highRiskCount,
+//       criticalRiskCount,
+//       suspiciousCount,
+//       recentReports,
+//       recentAuditLogs,
+//       categoryStats,
+//       statusStats,
+//       // ==========================================
+//       // NEW: Count distinct linked report groups
+//       // ==========================================
+//       clusterGroupsCount 
+//     ] = await Promise.all([
+//       Report.countDocuments(),
+//       Report.countDocuments({ status: 'pending' }),
+//       Report.countDocuments({ 'riskScore.level': 'high' }),
+//       Report.countDocuments({ 'riskScore.level': 'critical' }),
+//       Report.countDocuments({ 'threatFlags.suspicionScore': { $gte: 50 } }),
+//       Report.find().sort({ submittedAt: -1 }).limit(8).select('ackNumber title category severity riskScore status submittedAt threatFlags'),
+//       AuditLog.find().sort({ timestamp: -1 }).limit(10),
+//       Report.aggregate([{ $group: { _id: '$category', count: { $sum: 1 } } }]),
+//       Report.aggregate([{ $group: { _id: '$status', count: { $sum: 1 } } }]),
+//       // ==========================================
+//       // NEW AGGREGATION BLOCK
+//       // ==========================================
+//       Report.aggregate([
+//         { $match: { clusterId: { $ne: null } } },
+//         { $group: { _id: "$clusterId" } },
+//         { $count: "count" }
+//       ]).then(res => res[0]?.count || 0)
+//       // ==========================================
+//     ]);
+//     res.render('admin/dashboard', {
+//       title: 'Security Dashboard – SecureVoice',
+//       admin: { name: req.session.adminName, role: req.session.adminRole },
+//       stats: {
+//         totalReports,
+//         pendingReports,
+//         highRiskCount,
+//         criticalRiskCount,
+//         suspiciousCount,
+//         clusterGroupsCount, 
+//         resolvedReports: (statusStats.find(s => s._id === 'resolved') || {}).count || 0,
+//       },
+//       recentReports,
+//       recentAuditLogs,
+//       categoryStats,
+//       statusStats
+//     }); // <--- FIXED: Changed from ] to }
+//   } catch (err) {
+//     logger.error('Dashboard error:', err);
+//     res.render('error', { title: 'Error', message: 'Dashboard load failed.', code: 500 });
+//   }
+// };
+
+
+
+// GET /admin/reports/:id
+// exports.viewReport = async (req, res) => {
+//   try {
+//     const report = await Report.findById(req.params.id);
+//     if (!report) return res.render('error', { title: '404', message: 'Report not found.', code: 404 });
+
+//     // Decrypt sensitive fields for admin view
+//     const decryptedName = report.reporterName ? decrypt(report.reporterName) : 'Anonymous';
+//     const decryptedContact = report.reporterContact ? decrypt(report.reporterContact) : 'Not provided';
+    
+//     const decryptedMessages = (report.messages || []).map(m => {
+//       return {
+//         sender: m.sender,
+//         text: decrypt(m.content.iv + ':' + m.content.content),
+//         timestamp: m.timestamp
+//       };
+//     });
+
+//     res.render('admin/reportDetail', {
+//       title: `Report ${report.ackNumber}`,
+//       admin: { name: req.session.adminName },
+//       report,
+//       decryptedName,
+//       decryptedContact,
+//       decryptedMessages,
+//       csrfToken: req.csrfToken(),
+//     });
+//   } catch (err) {
+//     logger.error('View report error:', err);
+//     res.render('error', { title: 'Error', message: 'Could not load report.', code: 500 });
+//   }
+// };
