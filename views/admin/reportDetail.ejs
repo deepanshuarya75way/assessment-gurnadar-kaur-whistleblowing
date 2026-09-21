@@ -169,6 +169,65 @@
       </form>
     </div>
 
+  
+
+    <!-- ========================================================================= -->
+    <!-- START: PLACE THE AI CROSS-REFERENCE CARD HERE -->
+    <!-- ========================================================================= -->
+    <div class="dash-card" style="border-left: 4px solid #f59e0b;">
+      <div class="dash-card-header">
+        <h3><i class="fas fa-magnifying-glass-arrow-right"></i> Cross-Reference Engine</h3>
+      </div>
+      <div class="detail-body" style="padding: 15px; font-size: 13px;">
+        <p style="color: #64748b; margin-bottom: 12px; line-height: 1.4;">
+          Scanning category <span class="tag"><%= report.category %></span> targeting <strong><%= report.accusedOrganization || 'Unspecified Org' %></strong>.
+        </p>
+
+        <% if (locals.similarReports && similarReports.length > 0) { %>
+          <div style="background: #fef3c7; color: #92400e; padding: 10px; border-radius: 6px; margin-bottom: 12px; font-weight: 600;">
+            ⚠️ <%= similarReports.length %> matching case file(s) found.
+          </div>
+          
+          <div style="display: flex; flex-direction: column; gap: 10px;">
+            <% similarReports.forEach(match => { %>
+              <div style="padding: 10px; border: 1px solid #e2e8f0; border-radius: 6px; background: #fff;">
+                <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 4px;">
+                  <span class="mono" style="font-size: 11px; background: #f1f5f9; padding: 2px 4px; border-radius: 4px; font-weight: bold; color: #475569;">
+                    <%= match.ackNumber %>
+                  </span>
+                  <span style="font-size: 10px; text-transform: uppercase; background: #e0f2fe; color: #0369a1; padding: 2px 6px; border-radius: 9999px; font-weight: 600;">
+                    <%= match.status %>
+                  </span>
+                </div>
+                <strong style="color: #1e293b; display: block; margin-bottom: 6px; font-size: 13px;"><%= match.title %></strong>
+                
+                <form action="/admin/reports/<%= report._id %>/link" method="POST" style="margin: 0; width: 100%;">
+                  <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+                  <input type="hidden" name="targetClusterId" value="<%= match.clusterId || match._id %>">
+                  <button type="submit" class="btn btn-sm" style="width: 100%; padding: 6px; font-size: 12px; justify-content: center; background: #2563eb; color: #fff; border: none; border-radius: 4px; cursor: pointer; font-weight: 600;">
+                    Link to This File
+                  </button>
+                </form>
+              </div>
+            <% }) %>
+          </div>
+        <% } else { %>
+          <div style="background: #dcfce7; color: #166534; padding: 10px; border-radius: 6px; font-weight: 500; margin-bottom: 12px;">
+            ✓ No vocabulary overlaps detected.
+          </div>
+          <form action="/admin/reports/<%= report._id %>/link" method="POST" style="margin: 0;">
+            <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+            <button type="submit" class="btn btn-outline btn-sm" style="width: 100%; justify-content: center; font-size: 12px;">
+              Create New Incident Group
+            </button>
+          </form>
+        <% } %>
+      </div>
+    </div>
+    <!-- ========================================================================= -->
+    <!-- END: PLACE THE AI CROSS-REFERENCE CARD HERE -->
+    <!-- ========================================================================= -->
+
     <!-- Risk Analysis -->
     <div class="dash-card">
       <div class="dash-card-header"><h3><i class="fas fa-chart-bar"></i> Risk Analysis</h3></div>

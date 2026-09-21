@@ -69,6 +69,86 @@ exports.logout = async (req, res) => {
   res.redirect('/admin/login');
 };
 
+// // GET /admin/dashboard
+// exports.dashboard = async (req, res) => {
+//   try {
+//     const [
+//       totalReports,
+//       pendingReports,
+//       highRiskCount,
+//       criticalRiskCount,
+//       suspiciousCount,
+//       recentReports,
+//       recentAuditLogs,
+//       categoryStats,
+//       statusStats,
+//     ] = await Promise.all([
+//       Report.countDocuments(),
+//       Report.countDocuments({ status: 'pending' }),
+//       Report.countDocuments({ 'riskScore.level': 'high' }),
+//       Report.countDocuments({ 'riskScore.level': 'critical' }),
+//       Report.countDocuments({ 'threatFlags.suspicionScore': { $gte: 50 } }),
+//       Report.find().sort({ submittedAt: -1 }).limit(8).select('ackNumber title category severity riskScore status submittedAt threatFlags'),
+//       AuditLog.find().sort({ timestamp: -1 }).limit(10),
+//       Report.aggregate([{ $group: { _id: '$category', count: { $sum: 1 } } }]),
+//       Report.aggregate([{ $group: { _id: '$status', count: { $sum: 1 } } }]),
+//     ]);
+
+//     res.render('admin/dashboard', {
+//       title: 'Security Dashboard – SecureVoice',
+//       admin: { name: req.session.adminName, role: req.session.adminRole },
+//       stats: {
+//         totalReports,
+//         pendingReports,
+//         highRiskCount,
+//         criticalRiskCount,
+//         suspiciousCount,
+//         resolvedReports: (statusStats.find(s => s._id === 'resolved') || {}).count || 0,
+//       },
+//       recentReports,
+//       recentAuditLogs,
+//       categoryStats,
+//       statusStats,
+//     });
+//   } catch (err) {
+//     logger.error('Dashboard error:', err);
+//     res.render('error', { title: 'Error', message: 'Dashboard load failed.', code: 500 });
+//   }
+// };
+
+// // GET /admin/reports
+// exports.listReports = async (req, res) => {
+//   try {
+//     const page = parseInt(req.query.page) || 1;
+//     const limit = 15;
+//     const skip = (page - 1) * limit;
+
+//     const filter = {};
+//     if (req.query.status) filter.status = req.query.status;
+//     if (req.query.risk) filter['riskScore.level'] = req.query.risk;
+//     if (req.query.category) filter.category = req.query.category;
+
+//     const [reports, total] = await Promise.all([
+//       Report.find(filter).sort({ submittedAt: -1 }).skip(skip).limit(limit),
+//       Report.countDocuments(filter),
+//     ]);
+
+//     res.render('admin/reports', {
+//       title: 'All Reports',
+//       admin: { name: req.session.adminName },
+//       reports,
+//       currentPage: page,
+//       totalPages: Math.ceil(total / limit),
+//       total,
+//       query: req.query,
+//     });
+//   } catch (err) {
+//     logger.error('List reports error:', err);
+//     res.render('error', { title: 'Error', message: 'Could not load reports.', code: 500 });
+//   }
+// };
+
+
 // GET /admin/dashboard
 exports.dashboard = async (req, res) => {
   try {
@@ -82,6 +162,10 @@ exports.dashboard = async (req, res) => {
       recentAuditLogs,
       categoryStats,
       statusStats,
+      // ==========================================
+      // NEW: Count distinct linked report groups
+      // ==========================================
+      clusterGroupsCount 
     ] = await Promise.all([
       Report.countDocuments(),
       Report.countDocuments({ status: 'pending' }),
@@ -92,8 +176,16 @@ exports.dashboard = async (req, res) => {
       AuditLog.find().sort({ timestamp: -1 }).limit(10),
       Report.aggregate([{ $group: { _id: '$category', count: { $sum: 1 } } }]),
       Report.aggregate([{ $group: { _id: '$status', count: { $sum: 1 } } }]),
+      // ==========================================
+      // NEW AGGREGATION BLOCK
+      // ==========================================
+      Report.aggregate([
+        { $match: { clusterId: { $ne: null } } },
+        { $group: { _id: "$clusterId" } },
+        { $count: "count" }
+      ]).then(res => res[0]?.count || 0)
+      // ==========================================
     ]);
-
     res.render('admin/dashboard', {
       title: 'Security Dashboard – SecureVoice',
       admin: { name: req.session.adminName, role: req.session.adminRole },
@@ -103,56 +195,77 @@ exports.dashboard = async (req, res) => {
         highRiskCount,
         criticalRiskCount,
         suspiciousCount,
+        clusterGroupsCount, 
         resolvedReports: (statusStats.find(s => s._id === 'resolved') || {}).count || 0,
       },
       recentReports,
       recentAuditLogs,
       categoryStats,
-      statusStats,
-    });
+      statusStats
+    }); // <--- FIXED: Changed from ] to }
   } catch (err) {
     logger.error('Dashboard error:', err);
     res.render('error', { title: 'Error', message: 'Dashboard load failed.', code: 500 });
   }
 };
 
-// GET /admin/reports
-exports.listReports = async (req, res) => {
-  try {
-    const page = parseInt(req.query.page) || 1;
-    const limit = 15;
-    const skip = (page - 1) * limit;
 
-    const filter = {};
-    if (req.query.status) filter.status = req.query.status;
-    if (req.query.risk) filter['riskScore.level'] = req.query.risk;
-    if (req.query.category) filter.category = req.query.category;
 
-    const [reports, total] = await Promise.all([
-      Report.find(filter).sort({ submittedAt: -1 }).skip(skip).limit(limit),
-      Report.countDocuments(filter),
-    ]);
+// GET /admin/reports/:id
+// exports.viewReport = async (req, res) => {
+//   try {
+//     const report = await Report.findById(req.params.id);
+//     if (!report) return res.render('error', { title: '404', message: 'Report not found.', code: 404 });
 
-    res.render('admin/reports', {
-      title: 'All Reports',
-      admin: { name: req.session.adminName },
-      reports,
-      currentPage: page,
-      totalPages: Math.ceil(total / limit),
-      total,
-      query: req.query,
-    });
-  } catch (err) {
-    logger.error('List reports error:', err);
-    res.render('error', { title: 'Error', message: 'Could not load reports.', code: 500 });
-  }
-};
+//     // Decrypt sensitive fields for admin view
+//     const decryptedName = report.reporterName ? decrypt(report.reporterName) : 'Anonymous';
+//     const decryptedContact = report.reporterContact ? decrypt(report.reporterContact) : 'Not provided';
+    
+//     const decryptedMessages = (report.messages || []).map(m => {
+//       return {
+//         sender: m.sender,
+//         text: decrypt(m.content.iv + ':' + m.content.content),
+//         timestamp: m.timestamp
+//       };
+//     });
+
+//     res.render('admin/reportDetail', {
+//       title: `Report ${report.ackNumber}`,
+//       admin: { name: req.session.adminName },
+//       report,
+//       decryptedName,
+//       decryptedContact,
+//       decryptedMessages,
+//       csrfToken: req.csrfToken(),
+//     });
+//   } catch (err) {
+//     logger.error('View report error:', err);
+//     res.render('error', { title: 'Error', message: 'Could not load report.', code: 500 });
+//   }
+// };
+
 
 // GET /admin/reports/:id
 exports.viewReport = async (req, res) => {
   try {
     const report = await Report.findById(req.params.id);
     if (!report) return res.render('error', { title: '404', message: 'Report not found.', code: 404 });
+
+        // =========================================================================
+    // FIXED: CORRECT MONGODB TEXT SEARCH SYNTAX
+    // =========================================================================
+    const similarReports = await Report.find({
+      $text: { $search: report.description },
+      _id: { $ne: report._id }, // Exclude current report
+      category: report.category, // Limits text scan to matches within the same enum category
+      accusedOrganization: report.accusedOrganization // Limits matches to the same target entity
+    })
+    .select({ score: { $meta: "textScore" }, ackNumber: 1, title: 1, clusterId: 1, status: 1 })
+    .sort({ score: { $meta: "textScore" } })
+    .limit(5);
+    // =========================================================================
+
+    // =========================================================================
 
     // Decrypt sensitive fields for admin view
     const decryptedName = report.reporterName ? decrypt(report.reporterName) : 'Anonymous';
@@ -170,6 +283,7 @@ exports.viewReport = async (req, res) => {
       title: `Report ${report.ackNumber}`,
       admin: { name: req.session.adminName },
       report,
+      similarReports, // <-- Passed directly to admin/reportDetail.ejs
       decryptedName,
       decryptedContact,
       decryptedMessages,
@@ -180,6 +294,7 @@ exports.viewReport = async (req, res) => {
     res.render('error', { title: 'Error', message: 'Could not load report.', code: 500 });
   }
 };
+
 
 // POST /admin/reports/:id/status
 exports.updateStatus = async (req, res) => {
@@ -285,5 +400,37 @@ exports.serveAudio = async (req, res) => {
     res.sendFile(filePath);
   } else {
     res.status(404).send('Audio file not found');
+  }
+};
+
+
+// POST /admin/reports/:id/link
+exports.linkReportToCluster = async (req, res) => {
+  try {
+    const { targetClusterId } = req.body;
+    const report = await Report.findById(req.params.id);
+    if (!report) return res.status(404).json({ error: 'Report not found' });
+
+    // Generate a new cluster ID if starting a clean cluster group, otherwise join the target cluster
+    const finalClusterId = targetClusterId || new mongoose.Types.ObjectId();
+
+    report.clusterId = finalClusterId;
+    report.threatFlags.isDuplicate = true; // Flips your existing schema flag
+    await report.save();
+
+    await logAction({
+      adminId: req.session.adminId,
+      adminEmail: req.session.adminEmail,
+      action: 'LINK_REPORT_CLUSTER',
+      targetType: 'report',
+      targetId: report.ackNumber,
+      details: `Report linked into Case Cluster: ${finalClusterId}`,
+      ip: req.ip,
+    });
+
+    res.redirect(`/admin/reports/${req.params.id}`);
+  } catch (err) {
+    logger.error('Link cluster error:', err);
+    res.status(500).json({ error: 'Failed to link reports together.' });
   }
 };

@@ -1,4 +1,3 @@
-// models/Report.js
 const mongoose = require('mongoose');
 
 const reportSchema = new mongoose.Schema({
@@ -107,6 +106,15 @@ const reportSchema = new mongoose.Schema({
     uploadedAt: { type: Date, default: Date.now }
   }],
 
+  // ==========================================
+  // ADDED FIELDS FOR REPORT CLUSTERING & LINKS
+  // ==========================================
+  clusterId: { 
+    type: mongoose.Schema.Types.ObjectId, 
+    default: null,
+    index: true 
+  }
+
 }, { timestamps: false });
 
 // Update the updatedAt on save
@@ -114,5 +122,13 @@ reportSchema.pre('save', function (next) {
   this.updatedAt = new Date();
   next();
 });
+
+// =========================================================
+// TEXT INDEX FOR CORRELATION SCANNERS (Weighted Search)
+// =========================================================
+reportSchema.index(
+  { title: 'text', description: 'text', accusedOrganization: 'text' },
+  { weights: { title: 3, description: 1, accusedOrganization: 2 } }
+);
 
 module.exports = mongoose.model('Report', reportSchema);

@@ -1,6 +1,8 @@
 // controllers/reportController.js
+
 const { validationResult } = require('express-validator');
 const Report = require('../models/Report');
+const mongoose = require('mongoose'); // Required for unique ID assignment 
 const { encrypt, decrypt, hashSHA256, hashReport } = require('../utils/encryption');
 const { generateAckNumber } = require('../utils/tokenGenerator');
 const { analyzeReport } = require('../services/threatDetection');
@@ -76,6 +78,47 @@ exports.submitReport = async (req, res) => {
     const ackNumber = generateAckNumber();
     const contentHash = hashReport({ title, description, category, accusedOrganization });
 
+    // Initialize custom variables for duplicate auto-clustering
+    let assignedClusterId = null;
+    let finalIsDuplicate = threat.isDuplicate;
+    let finalSuspicionScore = threat.suspicionScore;
+    let finalFlags = [...(threat.flags || [])];
+
+    // =========================================================================
+    // AUTOMATED THREAT DETECTION: PROACTIVE DUPLICATE SCANNER (FIXED)
+    // =========================================================================
+     try {
+      // 1. Fixed operators ($text, $search) and 2. Removed the broken backslash escape from $meta
+      const matchingIncident = await Report.findOne({
+        $text: { $search: description },
+        category: category,
+        accusedOrganization: accusedOrganization
+      })
+      .select({ score: { $meta: "textScore" }, clusterId: 1 });
+
+      if (matchingIncident) {
+        finalIsDuplicate = true;
+        finalSuspicionScore = Math.max(75, threat.suspicionScore);
+        if (!finalFlags.includes('AUTOMATED_TEXT_MATCH_CLUSTER')) {
+          finalFlags.push('AUTOMATED_TEXT_MATCH_CLUSTER');
+        }
+
+        if (matchingIncident.clusterId) {
+          assignedClusterId = matchingIncident.clusterId;
+        } else {
+          const sharedClusterId = new mongoose.Types.ObjectId();
+          assignedClusterId = sharedClusterId;
+          
+          await Report.findByIdAndUpdate(matchingIncident._id, { clusterId: sharedClusterId });
+        }
+      }
+    } catch (scanError) {
+      logger.error("Proactive duplicate scan bypassed:", scanError);
+    }
+    // =========================================================================
+
+    // =========================================================================
+
     // Build report object
     const report = new Report({
       ackNumber,
@@ -94,11 +137,12 @@ exports.submitReport = async (req, res) => {
       userAgent: req.headers['user-agent']?.substring(0, 200),
       riskScore,
       threatFlags: {
-        isDuplicate: threat.isDuplicate,
+        isDuplicate: finalIsDuplicate,
         isSpam: threat.isSpam,
-        suspicionScore: threat.suspicionScore,
-        flags: threat.flags,
+        suspicionScore: finalSuspicionScore,
+        flags: finalFlags,
       },
+      clusterId: assignedClusterId,
       contentHash,
       previousHash,
       status: 'pending',
@@ -123,15 +167,20 @@ exports.submitReport = async (req, res) => {
 
 // GET /report/confirmation/:ackNumber
 exports.showConfirmation = async (req, res) => {
-  const { ackNumber } = req.params;
-  const report = await Report.findOne({ ackNumber }).select('ackNumber submittedAt status category severity');
-  if (!report) {
-    return res.render('error', { title: 'Not Found', message: 'Report not found.', code: 404 });
+  try {
+    const { ackNumber } = req.params;
+    const report = await Report.findOne({ ackNumber }).select('ackNumber submittedAt status category severity');
+    if (!report) {
+      return res.render('error', { title: 'Not Found', message: 'Report not found.', code: 404 });
+    }
+    res.render('report/confirmation', {
+      title: 'Report Submitted',
+      report,
+    });
+  } catch (err) {
+    logger.error('Confirmation page load error:', err);
+    res.render('error', { title: 'Error', message: 'Could not load confirmation details.', code: 500 });
   }
-  res.render('report/confirmation', {
-    title: 'Report Submitted',
-    report,
-  });
 };
 
 // GET /report/track — show tracking form
@@ -146,25 +195,30 @@ exports.showTrackForm = (req, res) => {
 
 // POST /report/track — look up report by ack number
 exports.trackReport = async (req, res) => {
-  const { ackNumber } = req.body;
-  const report = await Report.findOne({ ackNumber: ackNumber?.trim() })
-    .select('ackNumber submittedAt status category severity updatedAt');
+  try {
+    const { ackNumber } = req.body;
+    const report = await Report.findOne({ ackNumber: ackNumber?.trim() })
+      .select('ackNumber submittedAt status category severity updatedAt');
 
-  if (!report) {
-    return res.render('report/track', {
+    if (!report) {
+      return res.render('report/track', {
+        title: 'Track Your Report',
+        csrfToken: req.csrfToken(),
+        result: null,
+        error: 'No report found with that acknowledgement number.',
+      });
+    }
+
+    res.render('report/track', {
       title: 'Track Your Report',
       csrfToken: req.csrfToken(),
-      result: null,
-      error: 'No report found with that acknowledgement number.',
+      result: report,
+      error: null,
     });
+  } catch (err) {
+    logger.error('Track report error:', err);
+    res.render('error', { title: 'Error', message: 'Could not find tracking logs.', code: 500 });
   }
-
-  res.render('report/track', {
-    title: 'Track Your Report',
-    csrfToken: req.csrfToken(),
-    result: report,
-    error: null,
-  });
 };
 
 // --- Secure Dead Drop Messaging (User) ---
