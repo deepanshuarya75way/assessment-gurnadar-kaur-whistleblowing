@@ -58,7 +58,7 @@
       </div>
     </div>
 
-    <!-- Reporter Identity (Decrypted) -->
+    
     <div class="dash-card">
       <div class="dash-card-header">
         <h3><i class="fas fa-user-secret"></i> Reporter Identity <span class="encrypted-tag"><i class="fas fa-lock"></i> AES-256 Decrypted</span></h3>
@@ -82,13 +82,26 @@
     <!-- Evidence Files -->
     <% if (report.evidenceFiles && report.evidenceFiles.length) { %>
     <div class="dash-card">
-      <div class="dash-card-header"><h3><i class="fas fa-paperclip"></i> Evidence Files</h3></div>
-      <div class="evidence-list">
-        <% report.evidenceFiles.forEach(f => { %>
-        <div class="evidence-item">
-          <i class="fas fa-file"></i>
-          <span><%= f.originalName %></span>
-          <span class="file-meta"><%= f.mimeType %> · <%= (f.size/1024).toFixed(1) %>KB</span>
+      <div class="dash-card-header">
+        <h3><i class="fas fa-paperclip"></i> Evidence Files</h3>
+      </div>
+      <div class="evidence-list" style="display: flex; flex-direction: column; gap: 12px; padding: 15px;">
+        <% report.evidenceFiles.forEach((f, idx) => { %>
+        <div class="evidence-item" style="border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px; background: #fff; display: flex; justify-content: space-between; align-items: center; gap: 15px;">
+          <div style="display: flex; align-items: center; gap: 12px;">
+            <i class="fas fa-file-shield" style="font-size: 24px; color: #10b981;"></i>
+            <div style="display: flex; flex-direction: column; gap: 2px;">
+              <span style="font-weight: 600; color: #1e293b;"><%= f.originalName %></span>
+              <span class="file-meta" style="font-size: 11px; color: #64748b;"><%= f.mimeType %> · <%= (f.size/1024).toFixed(1) %>KB</span>
+              <% if (f.ipfsCID) { %>
+                <span style="font-size: 10px; color: #64748b; font-family: monospace; margin-top: 4px;">CID: <%= f.ipfsCID.substring(0, 10) %>...</span>
+                <span style="font-size: 10px; color: #10b981; font-family: monospace;">Ledger Hash Verified ✔</span>
+              <% } %>
+            </div>
+          </div>
+          <a href="/admin/reports/<%= report._id %>/attachments/evidence/<%= idx %>" class="btn btn-secure" style="background: #10b981; color: #fff; border: none; padding: 6px 12px; border-radius: 6px; font-size: 12px; font-weight: 600; text-decoration: none; display: inline-flex; align-items: center; gap: 6px; box-shadow: 0 2px 4px rgba(16,185,129,0.2); transition: all 0.2s;" onmouseover="this.style.background='#059669'" onmouseout="this.style.background='#10b981'">
+            <i class="fas fa-download"></i> Verify & Download
+          </a>
         </div>
         <% }) %>
       </div>
@@ -98,11 +111,21 @@
     <!-- Audio Evidence -->
     <% if (report.audioEvidence && report.audioEvidence.length) { %>
     <div class="dash-card">
-      <div class="dash-card-header"><h3><i class="fas fa-microphone-lines"></i> Audio Evidence</h3></div>
-      <div class="evidence-list">
-        <% report.audioEvidence.forEach(a => { %>
-        <div class="evidence-item" style="display:flex; flex-direction:column; gap:10px; align-items:flex-start;">
-          <div style="font-size:12px; color:#64748b;">Uploaded: <%= new Date(a.uploadedAt).toLocaleString() %></div>
+      <div class="dash-card-header">
+        <h3><i class="fas fa-microphone-lines"></i> Audio Evidence</h3>
+      </div>
+      <div class="evidence-list" style="display: flex; flex-direction: column; gap: 12px; padding: 15px;">
+        <% report.audioEvidence.forEach((a, idx) => { %>
+        <div class="evidence-item" style="border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px; background: #fff; display: flex; flex-direction: column; gap: 10px; align-items: flex-start;">
+          <div style="display: flex; justify-content: space-between; width: 100%; align-items: center;">
+            <div style="font-size:12px; color:#64748b; font-weight: 500;"><i class="fas fa-clock"></i> Uploaded: <%= new Date(a.uploadedAt).toLocaleString() %></div>
+            <a href="/admin/reports/<%= report._id %>/attachments/audio/<%= idx %>" class="btn btn-secure" style="background: #10b981; color: #fff; border: none; padding: 4px 10px; border-radius: 6px; font-size: 11px; font-weight: 600; text-decoration: none; display: inline-flex; align-items: center; gap: 6px; transition: all 0.2s;" onmouseover="this.style.background='#059669'" onmouseout="this.style.background='#10b981'">
+              <i class="fas fa-download"></i> Secure Download
+            </a>
+          </div>
+          <% if (a.ipfsCID) { %>
+            <div style="font-size: 10px; color: #64748b; font-family: monospace;">CID: <%= a.ipfsCID %></div>
+          <% } %>
           <audio controls src="/admin/audio/<%= a.filePath %>" style="width:100%; max-width:400px; height: 40px;"></audio>
         </div>
         <% }) %>
@@ -152,126 +175,139 @@
         <div class="form-group">
           <label>Status</label>
           <select name="status">
-            <option value="pending" <%= report.status==='pending'?'selected':'' %>>Pending</option>
-            <option value="under_review" <%= report.status==='under_review'?'selected':'' %>>Under Review</option>
-            <option value="investigating" <%= report.status==='investigating'?'selected':'' %>>Investigating</option>
-            <option value="resolved" <%= report.status==='resolved'?'selected':'' %>>Resolved</option>
-            <option value="dismissed" <%= report.status==='dismissed'?'selected':'' %>>Dismissed</option>
-          </select>
-        </div>
-        <div class="form-group">
-          <label>Admin Notes</label>
-          <textarea name="adminNotes" rows="4" placeholder="Internal notes about this report..."><%= report.adminNotes || '' %></textarea>
-        </div>
-        <button type="submit" class="btn btn-primary" style="width:100%">
-          <i class="fas fa-save"></i> Save Changes
-        </button>
-      </form>
-    </div>
+          <option value="pending" <%= report.status === 'pending' ? 'selected' : '' %>>Pending</option>
+<option value="under_review" <%= report.status === 'under_review' ? 'selected' : '' %>>Under Review</option>
+<option value="investigating" <%= report.status === 'investigating' ? 'selected' : '' %>>Investigating</option>
+<option value="resolved" <%= report.status === 'resolved' ? 'selected' : '' %>>Resolved</option>
+<option value="dismissed" <%= report.status === 'dismissed' ? 'selected' : '' %>>Dismissed</option>
+</select>
+</div>
 
-    <!-- Risk Analysis -->
-    <div class="dash-card">
-      <div class="dash-card-header"><h3><i class="fas fa-chart-bar"></i> Risk Analysis</h3></div>
-      <div class="risk-meter">
-        <div class="meter-label">Risk Score: <%= report.riskScore.score %>/100</div>
-        <div class="meter-bar">
-          <div class="meter-fill <%= report.riskScore.level %>" style="width:<%= report.riskScore.score %>%"></div>
-        </div>
-        <span class="risk-badge <%= report.riskScore.level %>" style="margin-top:8px"><%= report.riskScore.level.toUpperCase() %></span>
-      </div>
-      <% if (report.riskScore.factors && report.riskScore.factors.length) { %>
-      <div class="risk-factors">
-        <p class="factor-title">Risk Factors:</p>
-        <% report.riskScore.factors.forEach(f => { %>
+<div class="form-group">
+  <label>Admin Notes</label>
+  <textarea name="adminNotes" rows="4" placeholder="Internal notes about this report..."><%= report.adminNotes || '' %></textarea>
+</div>
+
+<button type="submit" class="btn btn-primary" style="width:100%">
+  <i class="fas fa-save"></i> Save Changes
+</button>
+</form>
+</div>
+
+<!-- Risk Analysis -->
+<div class="dash-card">
+  <div class="dash-card-header">
+    <h3><i class="fas fa-chart-bar"></i> Risk Analysis</h3>
+  </div>
+  <div class="risk-meter">
+    <div class="meter-label">Risk Score: <%= report.riskScore.score %>/100</div>
+    <div class="meter-bar">
+      <div class="meter-fill <%= report.riskScore.level %>" style="width:<%= report.riskScore.score %>%"></div>
+    </div>
+    <span class="risk-badge <%= report.riskScore.level %>" style="margin-top:8px">
+      <%= report.riskScore.level.toUpperCase() %>
+    </span>
+  </div>
+  
+  <% if (report.riskScore.factors && report.riskScore.factors.length) { %>
+    <div class="risk-factors">
+      <p class="factor-title">Risk Factors:</p>
+      <% report.riskScore.factors.forEach(f => { %>
         <div class="factor-item"><i class="fas fa-circle-dot"></i> <%= f %></div>
+      <% }) %>
+    </div>
+  <% } %>
+</div>
+
+<!-- Threat Detection -->
+<div class="dash-card">
+  <div class="dash-card-header">
+    <h3><i class="fas fa-shield-virus"></i> Threat Detection</h3>
+  </div>
+  <div class="threat-info">
+    <div class="threat-row">
+      <span>Suspicion Score</span>
+      <span class="<%= report.threatFlags.suspicionScore >= 50 ? 'danger' : 'safe' %>">
+        <%= report.threatFlags.suspicionScore %>%
+      </span>
+    </div>
+    <div class="threat-row">
+      <span>Duplicate Content</span>
+      <span class="<%= report.threatFlags.isDuplicate ? 'danger' : 'safe' %>">
+        <%= report.threatFlags.isDuplicate ? '⚠️ Yes' : '✓ No' %>
+      </span>
+    </div>
+    <div class="threat-row">
+      <span>Spam Detected</span>
+      <span class="<%= report.threatFlags.isSpam ? 'danger' : 'safe' %>">
+        <%= report.threatFlags.isSpam ? '⚠️ Yes' : '✓ No' %>
+      </span>
+    </div>
+    
+    <% if (report.threatFlags.flags && report.threatFlags.flags.length) { %>
+      <div class="threat-flags-list">
+        <% report.threatFlags.flags.forEach(f => { %>
+          <div class="flag-item"><i class="fas fa-flag"></i> <%= f %></div>
         <% }) %>
       </div>
-      <% } %>
-    </div>
+    <% } %>
+  </div>
+</div>
 
-    <!-- Threat Flags -->
-    <div class="dash-card">
-      <div class="dash-card-header"><h3><i class="fas fa-shield-virus"></i> Threat Detection</h3></div>
-      <div class="threat-info">
-        <div class="threat-row">
-          <span>Suspicion Score</span>
-          <span class="<%= report.threatFlags.suspicionScore >= 50 ? 'danger' : 'safe' %>">
-            <%= report.threatFlags.suspicionScore %>%
-          </span>
-        </div>
-        <div class="threat-row">
-          <span>Duplicate Content</span>
-          <span class="<%= report.threatFlags.isDuplicate ? 'danger' : 'safe' %>">
-            <%= report.threatFlags.isDuplicate ? '⚠️ Yes' : '✓ No' %>
-          </span>
-        </div>
-        <div class="threat-row">
-          <span>Spam Detected</span>
-          <span class="<%= report.threatFlags.isSpam ? 'danger' : 'safe' %>">
-            <%= report.threatFlags.isSpam ? '⚠️ Yes' : '✓ No' %>
-          </span>
-        </div>
-        <% if (report.threatFlags.flags && report.threatFlags.flags.length) { %>
-        <div class="threat-flags-list">
-          <% report.threatFlags.flags.forEach(f => { %>
-          <div class="flag-item"><i class="fas fa-flag"></i> <%= f %></div>
-          <% }) %>
-        </div>
-        <% } %>
-      </div>
-    </div>
-
-    <!-- Blockchain Integrity -->
-    <div class="dash-card" id="blockchain-card" style="border: 1px solid rgba(20, 184, 166,0.2); background: linear-gradient(135deg, rgba(20, 184, 166,0.03), rgba(139,92,246,0.03));">
-      <div class="dash-card-header">
-        <h3><i class="fas fa-link"></i> Blockchain Integrity</h3>
-        <span class="encrypted-tag"><i class="fas fa-shield-halved"></i> SHA-256</span>
-      </div>
-      <div class="detail-body" id="blockchain-body">
-        <!-- Loaded dynamically via JS -->
-        <div style="text-align: center; padding: 20px; color: var(--text-3);">
-          <i class="fas fa-spinner fa-spin" style="font-size: 20px; margin-bottom: 8px;"></i>
-          <p style="font-size: 13px;">Loading blockchain status...</p>
-        </div>
-      </div>
-    </div>
-
-    <!-- Integrity Chain (Content Hash) -->
-    <div class="dash-card">
-      <div class="dash-card-header"><h3><i class="fas fa-fingerprint"></i> Content Integrity</h3></div>
-      <div class="detail-body">
-        <div class="detail-row">
-          <span class="d-label">Content Hash</span>
-          <span class="d-value mono hash-val"><%= report.contentHash %></span>
-        </div>
-        <div class="detail-row">
-          <span class="d-label">Previous Hash</span>
-          <span class="d-value mono hash-val"><%= report.previousHash %></span>
-        </div>
-        <div class="detail-row">
-          <span class="d-label">Submitted</span>
-          <span class="d-value"><%= new Date(report.submittedAt).toLocaleString() %></span>
-        </div>
-      </div>
-    </div>
-
-    <!-- Forensic PDF Download -->
-    <div class="dash-card" style="border: 1px solid rgba(59,130,246,0.3); background: linear-gradient(135deg, rgba(59,130,246,0.05), rgba(139,92,246,0.05));">
-      <div class="dash-card-header"><h3><i class="fas fa-file-shield"></i> Forensic Report</h3></div>
-      <div style="padding: 16px; text-align: center;">
-        <p style="color: #94a3b8; font-size: 13px; margin-bottom: 16px; line-height: 1.5;">
-          Generate a comprehensive forensic PDF with decrypted details, SHA-256 hashes, integrity verification, audit trail, and risk analysis.
-        </p>
-        <a href="/admin/reports/<%= report._id %>/forensic-pdf" class="btn" id="sidebar-forensic-pdf" style="background: linear-gradient(135deg, #3b82f6, #8b5cf6); color: #fff; border: none; padding: 12px 24px; border-radius: 8px; font-weight: 600; display: inline-flex; align-items: center; gap: 10px; text-decoration: none; width: 100%; justify-content: center; transition: all 0.3s ease; box-shadow: 0 2px 16px rgba(59,130,246,0.3); font-size: 14px;" onmouseover="this.style.transform='translateY(-2px)';this.style.boxShadow='0 6px 24px rgba(59,130,246,0.5)'" onmouseout="this.style.transform='translateY(0)';this.style.boxShadow='0 2px 16px rgba(59,130,246,0.3)'">
-          <i class="fas fa-download"></i> Download Forensic PDF
-        </a>
-        <p style="color: #475569; font-size: 11px; margin-top: 10px;"><i class="fas fa-lock" style="margin-right: 4px;"></i> Admin-only · Audit logged</p>
-      </div>
+<!-- Blockchain Integrity -->
+<div class="dash-card" id="blockchain-card" style="border: 1px solid rgba(20, 184, 166, 0.2); background: linear-gradient(135deg, rgba(20, 184, 166, 0.03), rgba(139, 92, 246, 0.03));">
+  <div class="dash-card-header">
+    <h3><i class="fas fa-link"></i> Blockchain Integrity</h3>
+    <span class="encrypted-tag"><i class="fas fa-shield-halved"></i> SHA-256</span>
+  </div>
+  <div class="detail-body" id="blockchain-body">
+    <div style="text-align: center; padding: 20px; color: var(--text-3);">
+      <i class="fas fa-spinner fa-spin" style="font-size: 20px; margin-bottom: 8px;"></i>
+      <p style="font-size: 13px;">Loading blockchain status...</p>
     </div>
   </div>
 </div>
 
-<!-- Blockchain Integrity Script -->
+<!-- Content Integrity Header -->
+<div class="dash-card">
+  <div class="dash-card-header">
+    <h3><i class="fas fa-fingerprint"></i> Content Integrity</h3>
+  </div>
+  <div class="detail-body">
+    <div class="detail-row">
+      <span class="d-label">Content Hash</span>
+      <span class="d-value mono hash-val"><%= report.contentHash %></span>
+    </div>
+    <div class="detail-row">
+      <span class="d-label">Previous Hash</span>
+      <span class="d-value mono hash-val"><%= report.previousHash %></span>
+    </div>
+    <div class="detail-row">
+      <span class="d-label">Submitted</span>
+      <span class="d-value"><%= new Date(report.submittedAt).toLocaleString() %></span>
+    </div>
+  </div>
+</div>
+
+<!-- Forensic Report Card -->
+<div class="dash-card" style="border: 1px solid rgba(59,130,246,0.3); background: linear-gradient(135deg, rgba(59,130,246,0.05), rgba(139,92,246,0.05));">
+  <div class="dash-card-header">
+    <h3><i class="fas fa-file-shield"></i> Forensic Report</h3>
+  </div>
+  <div style="padding: 16px; text-align: center;">
+    <p style="color: #94a3b8; font-size: 13px; margin-bottom: 16px; line-height: 1.5;">
+      Generate a comprehensive forensic PDF with decrypted details, SHA-256 hashes, integrity verification, audit trail, and risk analysis.
+    </p>
+    <a href="/admin/reports/<%= report._id %>/forensic-pdf" class="btn" id="sidebar-forensic-pdf" style="background: linear-gradient(135deg, #3b82f6, #8b5cf6); color: #fff; border: none; padding: 12px 24px; border-radius: 8px; font-weight: 600; display: inline-flex; align-items: center; gap: 10px; text-decoration: none; width: 100%; justify-content: center; transition: all 0.3s ease; box-shadow: 0 2px 16px rgba(59,130,246,0.3); font-size: 14px;" onmouseover="this.style.transform='translateY(-2px)';this.style.boxShadow='0 6px 24px rgba(59,130,246,0.5)'" onmouseout="this.style.transform='translateY(0)';this.style.boxShadow='0 2px 16px rgba(59,130,246,0.3)'">
+      <i class="fas fa-download"></i> Download Forensic PDF
+    </a>
+    <p style="color: #475569; font-size: 11px; margin-top: 10px;">
+      <i class="fas fa-lock" style="margin-right: 4px;"></i> Admin-only · Audit logged
+    </p>
+  </div>
+</div>
+
+<!-- Blockchain Integrity Lifecycle Handler -->
 <script>
 (function() {
   const reportId = '<%= report._id %>';
@@ -290,12 +326,13 @@
   }
 
   function renderBlockchainStatus(data) {
+    // FIXED: Re-enclosed raw multiline string into clean templates to avoid JavaScript runtime crash
     if (!data.exists && !data.blockchain) {
       blockchainBody.innerHTML = `
-        <div style="text-align: center; padding: 16px;">
-          <div style="font-size: 32px; margin-bottom: 10px; opacity: 0.4;">🔗</div>
-          <p style="color: var(--text-3); font-size: 13px; margin-bottom: 12px;">No blockchain data yet.</p>
-          <p style="color: var(--text-3); font-size: 11px;">Generate a Forensic PDF to create a blockchain entry.</p>
+        <div style="text-align: center; padding: 16px;"> 
+          <div style="font-size: 32px; margin-bottom: 10px; opacity: 0.4;">🔗</div> 
+          <p style="color: var(--text-3); font-size: 13px; margin-bottom: 12px;">No blockchain data yet.</p> 
+          <p style="color: var(--text-3); font-size: 11px;">Generate a Forensic PDF to create a blockchain entry.</p> 
         </div>
       `;
       return;
@@ -303,7 +340,6 @@
 
     const bc = data.blockchain;
     const isVerified = bc.verified;
-    const statusClass = isVerified ? 'bc-verified' : 'bc-tampered';
     const statusText = isVerified ? '✅ Verified' : '❌ Tampered';
     const statusColor = isVerified ? 'var(--green)' : 'var(--red)';
     const statusBg = isVerified ? 'rgba(34,197,94,0.1)' : 'rgba(239,68,68,0.1)';
@@ -311,39 +347,38 @@
 
     blockchainBody.innerHTML = `
       <div style="text-align: center; margin-bottom: 24px; position: relative;">
-        <i class="fas fa-link" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 80px; opacity: 0.04; color: var(--accent);"></i>
-        <span style="position: relative; display: inline-flex; align-items: center; gap: 6px; padding: 6px 20px; border-radius: 50px; font-size: 14px; font-weight: 700; background: ${statusBg}; color: ${statusColor}; border: 1px solid ${statusBorder}; box-shadow: 0 0 15px ${statusBg};">${statusText}</span>
+        <span style="display: inline-flex; align-items: center; gap: 6px; padding: 6px 20px; border-radius: 50px; font-size: 14px; font-weight: 700; background: ${statusBg}; color: ${statusColor}; border: 1px solid ${statusBorder};">${statusText}</span>
       </div>
       
-      <div style="display: flex; flex-direction: column; gap: 10px; position: relative; z-index: 1;">
+      <div style="display: flex; flex-direction: column; gap: 10px;">
         <div style="display: flex; justify-content: space-between; align-items: center; padding-bottom: 6px; border-bottom: 1px solid var(--border);">
-          <span style="font-size: 12px; color: var(--text-3); font-weight: 600; text-transform: uppercase; letter-spacing: 1px;">Block Sequence</span>
-          <span style="font-family: var(--mono); color: var(--accent); font-weight: 700; font-size: 16px; background: rgba(20, 184, 166, 0.1); padding: 4px 10px; border-radius: 6px;">#${bc.blockId}</span>
+          <span style="font-size: 12px; color: var(--text-3); font-weight: 600; text-transform: uppercase;">Block Sequence</span>
+          <span style="font-family: var(--mono); color: var(--accent); font-weight: 700; font-size: 14px;">#${bc.blockId}</span>
         </div>
         
-        <div style="background: rgba(15, 23, 42, 0.4); border: 1px solid var(--border); border-radius: 8px; padding: 12px; display: flex; flex-direction: column; gap: 6px;">
-          <span style="font-size: 11px; color: var(--text-3); text-transform: uppercase; font-weight: 600; letter-spacing: 0.5px;"><i class="fas fa-fingerprint"></i> Block Hash</span>
-          <span style="font-family: var(--mono); font-size: 13px; color: var(--text-2); word-break: break-all; opacity: 0.9;">${bc.hash}</span>
+        <div style="display: flex; flex-direction: column; gap: 4px;">
+          <span style="font-size: 11px; color: var(--text-3); font-weight: 600;">Block Hash</span>
+          <span style="font-family: var(--mono); font-size: 12px; color: var(--text-2); word-break: break-all;">${bc.hash}</span>
         </div>
 
-        <div style="background: rgba(15, 23, 42, 0.4); border: 1px solid var(--border); border-radius: 8px; padding: 12px; display: flex; flex-direction: column; gap: 6px;">
-          <span style="font-size: 11px; color: var(--text-3); text-transform: uppercase; font-weight: 600; letter-spacing: 0.5px;"><i class="fas fa-link"></i> Previous Hash</span>
-          <span style="font-family: var(--mono); font-size: 13px; color: var(--text-2); word-break: break-all; opacity: 0.8;">${bc.previousHash}</span>
+        <div style="display: flex; flex-direction: column; gap: 4px;">
+          <span style="font-size: 11px; color: var(--text-3); font-weight: 600;">Previous Hash</span>
+          <span style="font-family: var(--mono); font-size: 12px; color: var(--text-2); word-break: break-all;">${bc.previousHash}</span>
         </div>
 
-        <div style="background: rgba(15, 23, 42, 0.4); border: 1px solid var(--border); border-radius: 8px; padding: 12px; display: flex; flex-direction: column; gap: 6px;">
-          <span style="font-size: 11px; color: var(--text-3); text-transform: uppercase; font-weight: 600; letter-spacing: 0.5px;"><i class="fas fa-file-pdf"></i> PDF Hash Payload</span>
-          <span style="font-family: var(--mono); font-size: 13px; color: var(--text-2); word-break: break-all; opacity: 0.8;">${bc.pdfHash}</span>
+        <div style="display: flex; flex-direction: column; gap: 4px;">
+          <span style="font-size: 11px; color: var(--text-3); font-weight: 600;">PDF Hash Payload</span>
+          <span style="font-family: var(--mono); font-size: 12px; color: var(--text-2); word-break: break-all;">${bc.pdfHash}</span>
         </div>
 
-        <div style="display: flex; justify-content: space-between; align-items: center; padding-top: 8px;">
-          <span style="font-size: 12px; color: var(--text-3); font-weight: 600;"><i class="far fa-clock"></i> Authenticated</span>
-          <span style="font-size: 13px; color: var(--text-2); font-weight: 500;">${formatDate(bc.timestamp)}</span>
+        <div style="display: flex; justify-content: space-between; align-items: center; padding-top: 8px; border-top: 1px solid var(--border);">
+          <span style="font-size: 12px; color: var(--text-3); font-weight: 600;">Authenticated</span>
+          <span style="font-size: 12px; color: var(--text-2); font-weight: 500;">${formatDate(bc.timestamp)}</span>
         </div>
       </div>
 
       <div style="margin-top: 24px; text-align: center;">
-        <button id="reverify-btn" onclick="reVerifyBlockchain()" style="background: linear-gradient(135deg, rgba(20, 184, 166,0.1), rgba(139,92,246,0.1)); border: 1px solid rgba(20, 184, 166,0.25); color: var(--accent); padding: 8px 20px; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 8px; transition: all 0.3s ease;" onmouseover="this.style.boxShadow='0 0 15px rgba(20, 184, 166, 0.2)'" onmouseout="this.style.boxShadow='none'">
+        <button id="reverify-btn" onclick="reVerifyBlockchain()" style="background: var(--bg-1); border: 1px solid var(--border); color: var(--text-1); padding: 8px 20px; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 8px;">
           <i class="fas fa-rotate"></i> Re-Verify Integrity
         </button>
       </div>
@@ -355,10 +390,10 @@
     .then(r => r.json())
     .then(data => renderBlockchainStatus(data))
     .catch(err => {
-      blockchainBody.innerHTML = '<p style="text-align:center; color:var(--red); font-size:13px; padding:16px;">Failed to load blockchain status.</p>';
+      blockchainBody.innerHTML = '<p style="text-align: center; color: var(--red); font-size: 13px;">Failed to load blockchain status.</p>';
     });
 
-  // Re-verify function (global scope)
+  // Re-verify function (global scope execution matrix)
   window.reVerifyBlockchain = function() {
     const btn = document.getElementById('reverify-btn');
     if (btn) {
@@ -370,21 +405,18 @@
       method: 'POST',
       credentials: 'same-origin',
       headers: {
-        'Content-Type': 'application/json',
-        'CSRF-Token': csrfToken,
+        'Content-Type': 'application/json'
       },
-      body: JSON.stringify({ _csrf: csrfToken }),
+      body: JSON.stringify({ _csrf: csrfToken })
     })
     .then(r => r.json())
     .then(data => {
-      // Artificial delay (1 second) so the admin actually sees the "Verifying..." spinner 
-      // instead of the math executing instantaneously in 20 milliseconds
       setTimeout(() => {
         if (data.blockchain) {
           renderBlockchainStatus({ exists: true, blockchain: { ...data.blockchain, verified: data.verified } });
         }
         
-        // Dynamic Pulse Animation (Card Flash)
+        // Dynamic Pulse Animation (Card Flash feedback loop)
         const card = document.getElementById('blockchain-card');
         if(card) {
           card.style.transition = 'all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275)';
@@ -394,21 +426,21 @@
           
           setTimeout(() => {
             card.style.transform = 'scale(1)';
-            card.style.borderColor = 'rgba(20, 184, 166,0.2)';
+            card.style.borderColor = 'rgba(20, 184, 166, 0.2)';
             card.style.boxShadow = 'none';
           }, 1500);
         }
       }, 1000);
     })
     .catch(err => {
+      alert("Ledger verification pipeline execution failed.");
       if (btn) {
         btn.disabled = false;
         btn.innerHTML = '<i class="fas fa-rotate"></i> Re-Verify Integrity';
       }
-      alert('Verification failed. Please try again.');
     });
   };
 })();
 </script>
 
-<%- include('../partials/adminClose') %>
+<%- include('../partials/footer') %>
