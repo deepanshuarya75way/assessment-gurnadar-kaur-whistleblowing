@@ -32,4 +32,8 @@ router.get('/audit-logs', requireAdmin, adminController.auditLogs);
 router.post('/message/reply/:id', requireAdmin, adminController.replyMessage);
 router.get('/audio/:filename', requireAdmin, adminController.serveAudio);
 
+// ─── NEW DECENTRALIZED DATA VERIFICATION & GATED RETRIEVAL ROUTE ───
+router.get('/reports/:id/attachments/:type/:index', requireAdmin, forensicReportController.downloadSecureAttachment);
+
 module.exports = router;
+

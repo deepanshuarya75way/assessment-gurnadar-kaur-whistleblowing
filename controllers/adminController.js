@@ -5,7 +5,7 @@ const AuditLog = require('../models/AuditLog');
 const { encrypt, decrypt } = require('../utils/encryption');
 const { logAction } = require('../services/auditService');
 const logger = require('../utils/logger');
-// const { contract } = require('../utils/blockchain');
+const { contract } = require('../utils/blockchain');
 
 
 // NEW DEPS FOR BLOCKCHAIN ACCESS CONTROL AND IPFS RETRIEVAL

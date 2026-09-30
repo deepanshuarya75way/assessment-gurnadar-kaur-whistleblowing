@@ -34,12 +34,14 @@ const reportSchema = new mongoose.Schema({
   accusedPersons: [{ type: String, maxlength: 100 }],
   location: { type: String, maxlength: 200 },
 
-  // Evidence files (stored securely)
+    // Evidence files (stored securely with Decentralized IPFS and Blockchain metrics)
   evidenceFiles: [{
     originalName: String,
-    storedName: String,
+    storedName: String, // You can assign an internal tracking tracking name here
     mimeType: String,
     size: Number,
+    ipfsCID: { type: String, default: null },   // Added for IPFS Decentralized Identifier
+    fileHash: { type: String, default: null },  // Added for SHA-256 Ledger anchoring
     uploadedAt: { type: Date, default: Date.now },
   }],
 

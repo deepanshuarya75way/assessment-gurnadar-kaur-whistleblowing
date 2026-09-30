@@ -1,4 +1,3 @@
-// controllers/reportController.js
 const { validationResult } = require('express-validator');
 const Report = require('../models/Report');
 const { encrypt, decrypt, hashSHA256, hashReport } = require('../utils/encryption');
@@ -48,14 +47,16 @@ exports.submitReport = async (req, res) => {
     // Generate the unique acknowledgement number early so we can attach it to the blockchain record
     const ackNumber = generateAckNumber();
 
-    // --- NEW MODIFIED BLOCKCHAIN & IPFS STORAGE IMPLEMENTATION ---
+    // ─── NEW MODIFIED BLOCKCHAIN & IPFS STORAGE IMPLEMENTATION ───
     let evidenceFiles = [];
     if (req.files && req.files['evidence']) {
+      let fileIndex = 0;
       for (const f of req.files['evidence']) {
         logger.info(`Uploading evidence file ${f.originalname} to IPFS for tracking ID: ${ackNumber}`);
         
-        // secureUpload handles: SHA-256 fingerprint -> Pinata IPFS upload -> Blockchain recording
-        const ipfsResult = await secureUpload(ackNumber, f.buffer, f.originalname);
+        // Append index suffix to prevent multiple files from overwriting each other on the contract ledger
+        const compositeKey = `${ackNumber}-file-${fileIndex}`;
+        const ipfsResult = await secureUpload(compositeKey, f.buffer, f.originalname);
         
         evidenceFiles.push({
           originalName: f.originalname,
@@ -64,6 +65,7 @@ exports.submitReport = async (req, res) => {
           ipfsCID: ipfsResult.ipfsCID,     // Saved from Pinata response
           fileHash: ipfsResult.fileHash    // Saved from Blockchain fingerprint
         });
+        fileIndex++;
       }
     }
     
@@ -72,9 +74,11 @@ exports.submitReport = async (req, res) => {
       const audioFile = req.files['audioEvidence'][0];
       logger.info(`Uploading audio file ${audioFile.originalname} to IPFS for tracking ID: ${ackNumber}`);
       
-      const ipfsResult = await secureUpload(ackNumber, audioFile.buffer, audioFile.originalname);
+      const compositeAudioKey = `${ackNumber}-audio-0`;
+      const ipfsResult = await secureUpload(compositeAudioKey, audioFile.buffer, audioFile.originalname);
       
       audioEvidence.push({
+        filePath: `ipfs://${ipfsResult.ipfsCID}`,
         originalName: audioFile.originalname,
         mimeType: audioFile.mimetype,
         size: audioFile.size,
@@ -83,7 +87,7 @@ exports.submitReport = async (req, res) => {
         uploadedAt: new Date()
       });
     }
-    // -------------------------------------------------------------
+    // ─────────────────────────────────────────────────────────────
 
     const parsedAccused = accusedPersons
       ? accusedPersons.split(',').map(s => s.trim()).filter(Boolean)
@@ -114,8 +118,8 @@ exports.submitReport = async (req, res) => {
       accusedOrganization,
       accusedPersons: parsedAccused,
       location,
-      evidenceFiles, // Array now contains secure CIDs and Blockchain fileHashes
-      audioEvidence, // Array now contains secure CIDs and Blockchain fileHashes
+      evidenceFiles, 
+      audioEvidence, 
       ipHash,
       userAgent: req.headers['user-agent']?.substring(0, 200),
       riskScore,
@@ -146,6 +150,108 @@ exports.submitReport = async (req, res) => {
     });
   }
 };
+
+// GET /report/confirmation/:ackNumber
+exports.showConfirmation = async (req, res) => {
+  try {
+    const { ackNumber } = req.params;
+    const report = await Report.findOne({ ackNumber }).select('ackNumber submittedAt status category severity');
+    if (!report) {
+      return res.render('error', { title: 'Not Found', message: 'Report not found.', code: 404 });
+    }
+    res.render('report/confirmation', {
+      title: 'Report Submitted',
+      report,
+    });
+  } catch (err) {
+    logger.error('Error opening confirmation page:', err);
+    res.status(500).send("Internal server error.");
+  }
+};
+
+// GET /report/track — show tracking form
+exports.showTrackForm = (req, res) => {
+  res.render('report/track', {
+    title: 'Track Your Report',
+    csrfToken: req.csrfToken(),
+    result: null,
+    error: null,
+  });
+};
+
+exports.trackReport = async (req, res) => {
+  const { ackNumber } = req.body;
+  const report = await Report.findOne({ ackNumber: ackNumber?.trim() })
+    .select('ackNumber submittedAt status category severity updatedAt');
+
+  if (!report) {
+    return res.render('report/track', {
+      title: 'Track Your Report',
+      csrfToken: req.csrfToken(),
+      result: null,
+      error: 'No report found with that acknowledgement number.',
+    });
+  }
+
+  res.render('report/track', {
+    title: 'Track Your Report',
+    csrfToken: req.csrfToken(),
+    result: report,
+    error: null,
+  });
+};
+
+exports.sendMessage = async (req, res) => {
+  const { trackingId, text } = req.body;
+  if (!trackingId || !text || text.trim().length === 0 || text.length > 2000) {
+    return res.status(400).json({ error: 'Invalid input' });
+  }
+
+  try {
+    const report = await Report.findOne({ ackNumber: trackingId });
+    if (!report) return res.status(404).json({ error: 'Report not found' });
+    const encryptedText = encrypt(text); 
+    const [iv, content] = encryptedText.split(':');
+
+    report.messages.push({
+      sender: 'user',
+      content: { iv, content },
+      timestamp: new Date()
+    });
+
+    await report.save();
+    res.json({ success: true, message: 'Message securely sent.' });
+  } catch (err) {
+    logger.error('Error sending message:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+exports.getMessages = async (req, res) => {
+  const { trackingId } = req.params;
+  try {
+    const report = await Report.findOne({ ackNumber: trackingId }).select('messages');
+    if (!report) return res.status(404).json({ error: 'Report not found' });
+
+    const decryptedMessages = report.messages.map(m => {
+      const encryptedStr = m.content.iv + ':' + m.content.content;
+      return {
+        id: m._id,
+        sender: m.sender,
+        text: decrypt(encryptedStr),
+        timestamp: m.timestamp
+      };
+    });
+    res.json({ messages: decryptedMessages });
+  } catch (err) {
+    logger.error('Error fetching messages:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+
+
+
 
 // GET /report/confirmation/:ackNumber
 exports.showConfirmation = async (req, res) => {

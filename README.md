@@ -71,6 +71,33 @@ Blockchain integrity is verified before file retrieval.
 Invalid or tampered files are rejected.
 ---
 
+SecureVoice is an anonymous whistleblowing and cybersecurity reporting platform built with **Node.js, Express, MongoDB, and EJS**.
+
+A reporter can submit an incident, optionally attach documents/images/audio, and receive an acknowledgement number for anonymous tracking.
+
+On the investigation side, authorized administrators can:
+
+* review submitted reports
+* analyze risk and suspicious activity
+* communicate with reporters
+* update case status
+* inspect evidence
+* verify integrity information
+* review audit activity
+* generate forensic PDF reports
+
+The goal is to create a workflow where **reporter privacy, evidence integrity, and investigator visibility are considered together**.
+1. Add IPFS-Based Secure File Storage and Blockchain-Gated Access
+Replace direct file storage with IPFS using a Pinata-like service and ensure incident files can only be accessed by authenticated and authorized users.
+
+Expected behavior: Upload incident files to IPFS via Pinata, store the CID and SHA-256 hash on the blockchain, and allow file retrieval only for authenticated and authorized users after integrity verification.
+Acceptance criteria
+Files are successfully pinned to IPFS.
+CID and file hash are stored with the incident.
+Only authenticated and authorized users can access files.
+Blockchain integrity is verified before file retrieval.
+Invalid or tampered files are rejected.
+---
 # ⭐ Core Capabilities
 
 | Capability               | Description                                                                   |
